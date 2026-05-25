@@ -113,7 +113,7 @@ end_date = st.sidebar.date_input("📅 종료일", datetime(2024, 12, 31))
 run_analysis = st.sidebar.button("🚀 분석 시작", type="primary", use_container_width=True)
 
 # ------------------------------
-# 데이터 로드 함수 (강화됨)
+# 데이터 로드 함수 (수정됨)
 # ------------------------------
 @st.cache_data
 def load_data(tickers, start, end):
@@ -125,8 +125,8 @@ def load_data(tickers, start, end):
     
     # 모든 값이 NaN인 컬럼 제거
     df = df.dropna(axis=1, how='all')
-    # 결측치 앞뒤로 채우기
-    df = df.fillna(method='ffill').fillna(method='bfill')
+    # 결측치 앞뒤로 채우기 (ffill -> bfill)
+    df = df.ffill().bfill()
     return df
 
 # ------------------------------
@@ -148,7 +148,7 @@ if run_analysis:
                 st.stop()
             
             monthly_price = price_data.resample('ME').last()
-            monthly_price = monthly_price.fillna(method='ffill').fillna(method='bfill')
+            monthly_price = monthly_price.ffill().bfill()   # fillna 대신 ffill/bfill
             
             # 0 이하 값 확인
             if (monthly_price <= 0).any().any():
