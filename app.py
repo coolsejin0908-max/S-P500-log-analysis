@@ -113,15 +113,21 @@ end_date = st.sidebar.date_input("📅 종료일", datetime(2024, 12, 31))
 run_analysis = st.sidebar.button("🚀 분석 시작", type="primary", use_container_width=True)
 
 # ------------------------------
-# 데이터 로드 함수
+# 데이터 로드 함수 (강화됨)
 # ------------------------------
 @st.cache_data
 def load_data(tickers, start, end):
     data = yf.download(tickers, start=start, end=end, group_by='ticker', auto_adjust=False)
     if len(tickers) == 1:
-        return pd.DataFrame({tickers[0]: data['Close']})
+        df = pd.DataFrame({tickers[0]: data['Close']})
     else:
-        return data.xs('Close', axis=1, level=1)
+        df = data.xs('Close', axis=1, level=1)
+    
+    # 모든 값이 NaN인 컬럼 제거
+    df = df.dropna(axis=1, how='all')
+    # 결측치 앞뒤로 채우기
+    df = df.fillna(method='ffill').fillna(method='bfill')
+    return df
 
 # ------------------------------
 # 분석 실행
@@ -136,13 +142,24 @@ if run_analysis:
     with st.spinner("📡 주가 데이터를 불러오는 중입니다..."):
         try:
             price_data = load_data(all_stocks, start_date, end_date)
+            
+            if price_data.empty:
+                st.error("선택한 종목의 데이터가 없습니다. 다른 종목이나 기간을 선택하세요.")
+                st.stop()
+            
             monthly_price = price_data.resample('ME').last()
+            monthly_price = monthly_price.fillna(method='ffill').fillna(method='bfill')
+            
+            # 0 이하 값 확인
+            if (monthly_price <= 0).any().any():
+                st.warning("일부 종목에 0 이하 가격이 있어 로그 변환 시 문제가 발생할 수 있습니다.")
+                
         except Exception as e:
             st.error(f"데이터 로드 실패: {e}")
             st.stop()
 
-    # 상용로그 변환
-    log_price = np.log10(monthly_price)
+    # 상용로그 변환 (0 이하 방지)
+    log_price = np.log10(monthly_price.clip(lower=1e-6))
     log_returns = log_price.diff() * 100
 
     # ------------------------------
@@ -216,7 +233,7 @@ if run_analysis:
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------
-    # 4. 변동성 집중 시기 + 히트맵 (Plotly go.Heatmap - 한글 깨짐 없음)
+    # 4. 변동성 집중 시기 + 히트맵 (Plotly go.Heatmap)
     # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("⏰ 4. 변동성 집중 시기")
@@ -229,7 +246,6 @@ if run_analysis:
     else:
         st.info("충분한 수익률 데이터가 없어 TOP5를 표시할 수 없습니다.")
     
-    # 히트맵: 연도-월 평균 로그수익률 (Plotly)
     st.write("**월별 평균 로그수익률 히트맵**")
     mean_returns = log_returns.mean(axis=1).dropna()
     
@@ -242,13 +258,10 @@ if run_analysis:
         heatmap_data = heatmap_df.pivot(index='year', columns='month', values='return')
         
         if not heatmap_data.empty and not heatmap_data.isnull().all().all():
-            # NaN을 0으로 채우고 float 변환 (TypeError 방지)
             heatmap_data = heatmap_data.fillna(0).astype(float)
-            
-            # Plotly Heatmap 생성
             fig_heat = go.Figure(data=go.Heatmap(
                 z=heatmap_data.values,
-                x=[f"{int(m)}월" for m in heatmap_data.columns],  # 한글 '월' 사용
+                x=[f"{int(m)}월" for m in heatmap_data.columns],
                 y=heatmap_data.index,
                 colorscale='RdBu_r',
                 zmid=0,
@@ -270,6 +283,7 @@ if run_analysis:
         st.info("📊 히트맵을 표시할 충분한 데이터가 없습니다.")
     
     st.markdown('</div>', unsafe_allow_html=True)
+
     # ------------------------------
     # 5. 결과 요약
     # ------------------------------
