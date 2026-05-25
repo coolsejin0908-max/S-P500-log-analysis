@@ -5,6 +5,8 @@ import yfinance as yf
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import datetime
 
 # ------------------------------
@@ -99,7 +101,7 @@ end_date = st.sidebar.date_input("📅 종료일", datetime(2024, 12, 31))
 run_analysis = st.sidebar.button("🚀 분석 시작", type="primary", use_container_width=True)
 
 # ------------------------------
-# 데이터 로드 함수 (오류 수정됨)
+# 데이터 로드 함수
 # ------------------------------
 @st.cache_data
 def load_data(tickers, start, end):
@@ -122,7 +124,6 @@ if run_analysis:
     with st.spinner("📡 주가 데이터를 불러오는 중입니다..."):
         try:
             price_data = load_data(all_stocks, start_date, end_date)
-            # 수정: 'M' -> 'ME' (Pandas 2.2+ 호환)
             monthly_price = price_data.resample('ME').last()
         except Exception as e:
             st.error(f"데이터 로드 실패: {e}")
@@ -130,7 +131,7 @@ if run_analysis:
 
     # 상용로그 변환
     log_price = np.log10(monthly_price)
-    log_returns = log_price.diff() * 100  # 월별 로그 수익률(%)
+    log_returns = log_price.diff() * 100
 
     # ------------------------------
     # 1. 데이터 미리보기
@@ -203,7 +204,7 @@ if run_analysis:
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------
-    # 4. 변동성 집중 시기 + 히트맵 (완전 수정됨)
+    # 4. 변동성 집중 시기 + 히트맵 (오류 제거: matplotlib/seaborn 사용)
     # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("⏰ 4. 변동성 집중 시기")
@@ -216,35 +217,31 @@ if run_analysis:
     else:
         st.info("충분한 수익률 데이터가 없어 TOP5를 표시할 수 없습니다.")
     
-    # 히트맵: 연도-월 평균 로그수익률
+    # 히트맵: 연도-월 평균 로그수익률 (matplotlib + seaborn)
     st.write("**월별 평균 로그수익률 히트맵**")
     mean_returns = log_returns.mean(axis=1).dropna()
     
-    if len(mean_returns) > 0:
+    if len(mean_returns) >= 2:
         heatmap_df = pd.DataFrame({
             'year': mean_returns.index.year,
             'month': mean_returns.index.month,
             'return': mean_returns.values
         })
         heatmap_data = heatmap_df.pivot(index='year', columns='month', values='return')
-        heatmap_data.columns = [f"{int(col)}월" for col in heatmap_data.columns]
         
-        if not heatmap_data.isnull().all().all():
-            fig_heat = px.imshow(
-                heatmap_data, 
-                text_auto=".2f", 
-                aspect="auto", 
-                color_continuous_scale="RdBu_r",
-                title="월별 평균 로그수익률 (%)", 
-                template="plotly_dark", 
-                zmid=0
-            )
-            fig_heat.update_layout(height=500)
-            st.plotly_chart(fig_heat, use_container_width=True)
+        if not heatmap_data.empty and not heatmap_data.isnull().all().all():
+            fig_heat, ax_heat = plt.subplots(figsize=(12, 6))
+            sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="coolwarm", center=0, ax=ax_heat)
+            ax_heat.set_title("월별 평균 로그수익률 (%)")
+            ax_heat.set_xlabel("월")
+            ax_heat.set_ylabel("연도")
+            ax_heat.set_xticklabels([f"{int(m)}월" for m in heatmap_data.columns])
+            st.pyplot(fig_heat)
+            plt.close(fig_heat)
         else:
-            st.warning("⚠️ 히트맵 데이터가 모두 비어 있습니다 (NaN). 더 긴 기간을 선택하세요.")
+            st.warning("⚠️ 히트맵 데이터가 모두 비어 있습니다. 더 긴 기간을 선택하세요.")
     else:
-        st.info("📊 히트맵을 표시할 수익률 데이터가 없습니다.")
+        st.info("📊 히트맵을 표시할 충분한 데이터가 없습니다.")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
