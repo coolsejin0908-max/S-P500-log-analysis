@@ -303,38 +303,60 @@ else:
     )
 
 st.markdown('</div>', unsafe_allow_html=True)
-    # ------------------------------
-    # 5. 결과 요약
-    # ------------------------------
-    with st.container():
-        st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-        st.subheader("💡 탐구 결과 요약")
-        if tech_stocks:
-            tech_vol = log_returns[tech_stocks].std().mean()
-        else:
-            tech_vol = 0
-        if consumer_stocks:
-            cons_vol = log_returns[consumer_stocks].std().mean()
-        else:
-            cons_vol = 0
-        
-        peak_month = "없음"
-        if 'top_months' in locals() and not top_months.empty:
-            peak_month = top_months.index[0].strftime('%Y년 %m월')
-        
-        col_sum1, col_sum2 = st.columns(2)
-        with col_sum1:
-            st.metric("📱 기술주 평균 월별 변동성", f"{tech_vol:.2f}%", delta="높음" if tech_vol > cons_vol else "낮음")
-            st.metric("🛒 소비재주 평균 월별 변동성", f"{cons_vol:.2f}%")
-        with col_sum2:
-            st.markdown(f"**🔥 가장 큰 변동이 있었던 달:** {peak_month}")
-            st.markdown("**🔍 상용로그의 역할**  \n주가를 log₁₀ 변환하면 지수 성장이 선형이 되어 상대적 변화율(수익률)을 직관적으로 비교할 수 있습니다.")
-        st.markdown(f"**예상과 일치?** 기술주의 변동성이 소비재주보다 {abs(tech_vol - cons_vol):.2f}%p 더 큽니다.")
-        st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
-else:
-    st.info("👈 왼쪽 사이드바에서 종목과 기간을 선택한 후 **분석 시작** 버튼을 눌러주세요.")
-    col_img1, col_img2, col_img3 = st.columns(3)
-    with col_img2:
-        st.image("https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=400&auto=format", 
-                 caption="시장 데이터를 로그 관점으로 분석해보세요", use_container_width=True)
+# ------------------------------
+# 5. 결과 요약
+# ------------------------------
+with st.container():
+
+    st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+
+    st.subheader("💡 탐구 결과 요약")
+
+    if tech_stocks:
+        tech_vol = log_returns[tech_stocks].std().mean()
+    else:
+        tech_vol = 0
+
+    if consumer_stocks:
+        cons_vol = log_returns[consumer_stocks].std().mean()
+    else:
+        cons_vol = 0
+
+    peak_month = "없음"
+
+    if 'top_months' in locals() and not top_months.empty:
+        peak_month = top_months.index[0].strftime('%Y년 %m월')
+
+    col_sum1, col_sum2 = st.columns(2)
+
+    with col_sum1:
+        st.metric(
+            "📱 기술주 평균 월별 변동성",
+            f"{tech_vol:.2f}%",
+            delta="높음" if tech_vol > cons_vol else "낮음"
+        )
+
+        st.metric(
+            "🛒 소비재주 평균 월별 변동성",
+            f"{cons_vol:.2f}%"
+        )
+
+    with col_sum2:
+        st.markdown(
+            f"**🔥 가장 큰 변동이 있었던 달:** {peak_month}"
+        )
+
+        st.markdown(
+            "**🔍 상용로그의 역할**  \n"
+            "주가를 log₁₀ 변환하면 지수 성장이 선형이 되어 "
+            "상대적 변화율(수익률)을 직관적으로 비교할 수 있습니다."
+        )
+
+    st.markdown(
+        f"**예상과 일치?** 기술주의 변동성이 "
+        f"소비재주보다 {abs(tech_vol - cons_vol):.2f}%p 더 큽니다."
+    )
+
+    st.markdown('</div>', unsafe_allow_html=True)
