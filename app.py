@@ -8,6 +8,18 @@ from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
+import platform
+
+# ------------------------------
+# 한글 폰트 설정 (matplotlib/seaborn)
+# ------------------------------
+if platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+elif platform.system() == 'Darwin':  # Mac
+    plt.rcParams['font.family'] = 'AppleGothic'
+else:  # Linux (Streamlit Cloud)
+    plt.rcParams['font.family'] = 'NanumGothic'
+plt.rcParams['axes.unicode_minus'] = False
 
 # ------------------------------
 # 페이지 설정
@@ -204,7 +216,7 @@ if run_analysis:
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------
-    # 4. 변동성 집중 시기 + 히트맵 (오류 제거: matplotlib/seaborn 사용)
+    # 4. 변동성 집중 시기 + 히트맵 (한글 깨짐 해결됨)
     # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("⏰ 4. 변동성 집중 시기")
@@ -217,7 +229,7 @@ if run_analysis:
     else:
         st.info("충분한 수익률 데이터가 없어 TOP5를 표시할 수 없습니다.")
     
-    # 히트맵: 연도-월 평균 로그수익률 (matplotlib + seaborn)
+    # 히트맵: 연도-월 평균 로그수익률
     st.write("**월별 평균 로그수익률 히트맵**")
     mean_returns = log_returns.mean(axis=1).dropna()
     
@@ -235,6 +247,7 @@ if run_analysis:
             ax_heat.set_title("월별 평균 로그수익률 (%)")
             ax_heat.set_xlabel("월")
             ax_heat.set_ylabel("연도")
+            # x축 레이블을 "1월", "2월", ...로 표시 (한글 지원)
             ax_heat.set_xticklabels([f"{int(m)}월" for m in heatmap_data.columns])
             st.pyplot(fig_heat)
             plt.close(fig_heat)
