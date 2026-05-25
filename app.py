@@ -99,7 +99,7 @@ end_date = st.sidebar.date_input("📅 종료일", datetime(2024, 12, 31))
 run_analysis = st.sidebar.button("🚀 분석 시작", type="primary", use_container_width=True)
 
 # ------------------------------
-# 데이터 로드 함수 (수정됨)
+# 데이터 로드 함수
 # ------------------------------
 @st.cache_data
 def load_data(tickers, start, end):
@@ -122,7 +122,6 @@ if run_analysis:
     with st.spinner("📡 주가 데이터를 불러오는 중입니다..."):
         try:
             price_data = load_data(all_stocks, start_date, end_date)
-            # 수정: 'M' -> 'ME' (Pandas 2.2+ 호환)
             monthly_price = price_data.resample('ME').last()
         except Exception as e:
             st.error(f"데이터 로드 실패: {e}")
@@ -155,17 +154,13 @@ if run_analysis:
     
     fig = make_subplots(rows=2, cols=2, subplot_titles=("원본 종가", "로그 가격 (log₁₀)", "월별 로그 수익률 (%)", "12개월 롤링 변동성"))
     
-    # 원본 가격
     for col in monthly_price.columns:
         fig.add_trace(go.Scatter(x=monthly_price.index, y=monthly_price[col], name=col, mode='lines'), row=1, col=1)
-    # 로그 가격
     for col in log_price.columns:
         fig.add_trace(go.Scatter(x=log_price.index, y=log_price[col], name=col, mode='lines', showlegend=False), row=1, col=2)
-    # 로그 수익률
     for col in log_returns.columns:
         fig.add_trace(go.Scatter(x=log_returns.index, y=log_returns[col], name=col, mode='lines'), row=2, col=1)
     fig.add_hline(y=0, line_dash="dash", line_color="red", row=2, col=1)
-    # 롤링 변동성
     rolling_vol = log_returns.rolling(12).std()
     for col in rolling_vol.columns:
         fig.add_trace(go.Scatter(x=rolling_vol.index, y=rolling_vol[col], name=col, mode='lines'), row=2, col=2)
@@ -203,7 +198,7 @@ if run_analysis:
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------
-    # 4. 변동성 집중 시기 + 히트맵
+    # 4. 변동성 집중 시기 + 히트맵 (수정됨)
     # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("⏰ 4. 변동성 집중 시기")
@@ -213,8 +208,19 @@ if run_analysis:
     st.write("**전체 종목 평균 절대 로그수익률 TOP5**")
     st.dataframe(top_months.reset_index().rename(columns={"index": "날짜", 0: "평균 |로그수익률| (%)"}), use_container_width=True)
     
+    # 히트맵: 연도별-월별 평균 로그수익률
     st.write("**월별 평균 로그수익률 히트맵**")
-    heatmap_data = log_returns.mean(axis=1).unstack().iloc[:, :12]
+    mean_returns = log_returns.mean(axis=1).dropna()
+    # 날짜를 연도와 월로 분리하여 피벗 테이블 생성
+    heatmap_df = pd.DataFrame({
+        'year': mean_returns.index.year,
+        'month': mean_returns.index.month,
+        'return': mean_returns.values
+    })
+    heatmap_data = heatmap_df.pivot(index='year', columns='month', values='return')
+    # 월 컬럼 이름을 1~12에서 '1월'~'12월'로 변경 (선택사항)
+    heatmap_data.columns = [f"{int(col)}월" for col in heatmap_data.columns]
+    
     fig_heat = px.imshow(heatmap_data, text_auto=".2f", aspect="auto", color_continuous_scale="RdBu_r",
                          title="월별 평균 로그수익률 (%)", template="plotly_dark", zmid=0)
     fig_heat.update_layout(height=500)
