@@ -216,7 +216,7 @@ if run_analysis:
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------
-    # 4. 변동성 집중 시기 + 히트맵 (한글 깨짐 해결됨)
+    # 4. 변동성 집중 시기 + 히트맵 (Plotly go.Heatmap - 한글 깨짐 없음)
     # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("⏰ 4. 변동성 집중 시기")
@@ -229,7 +229,7 @@ if run_analysis:
     else:
         st.info("충분한 수익률 데이터가 없어 TOP5를 표시할 수 없습니다.")
     
-    # 히트맵: 연도-월 평균 로그수익률
+    # 히트맵: 연도-월 평균 로그수익률 (Plotly)
     st.write("**월별 평균 로그수익률 히트맵**")
     mean_returns = log_returns.mean(axis=1).dropna()
     
@@ -242,22 +242,34 @@ if run_analysis:
         heatmap_data = heatmap_df.pivot(index='year', columns='month', values='return')
         
         if not heatmap_data.empty and not heatmap_data.isnull().all().all():
-            fig_heat, ax_heat = plt.subplots(figsize=(12, 6))
-            sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="coolwarm", center=0, ax=ax_heat)
-            ax_heat.set_title("월별 평균 로그수익률 (%)")
-            ax_heat.set_xlabel("월")
-            ax_heat.set_ylabel("연도")
-            # x축 레이블을 "1월", "2월", ...로 표시 (한글 지원)
-            ax_heat.set_xticklabels([f"{int(m)}월" for m in heatmap_data.columns])
-            st.pyplot(fig_heat)
-            plt.close(fig_heat)
+            # NaN을 0으로 채우고 float 변환 (TypeError 방지)
+            heatmap_data = heatmap_data.fillna(0).astype(float)
+            
+            # Plotly Heatmap 생성
+            fig_heat = go.Figure(data=go.Heatmap(
+                z=heatmap_data.values,
+                x=[f"{int(m)}월" for m in heatmap_data.columns],  # 한글 '월' 사용
+                y=heatmap_data.index,
+                colorscale='RdBu_r',
+                zmid=0,
+                text=heatmap_data.values.round(2),
+                texttemplate='%{text:.2f}',
+                textfont={"size": 10}
+            ))
+            fig_heat.update_layout(
+                title="월별 평균 로그수익률 (%)",
+                xaxis_title="월",
+                yaxis_title="연도",
+                template="plotly_dark",
+                height=500
+            )
+            st.plotly_chart(fig_heat, use_container_width=True)
         else:
             st.warning("⚠️ 히트맵 데이터가 모두 비어 있습니다. 더 긴 기간을 선택하세요.")
     else:
         st.info("📊 히트맵을 표시할 충분한 데이터가 없습니다.")
     
     st.markdown('</div>', unsafe_allow_html=True)
-
     # ------------------------------
     # 5. 결과 요약
     # ------------------------------
