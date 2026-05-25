@@ -99,7 +99,7 @@ end_date = st.sidebar.date_input("📅 종료일", datetime(2024, 12, 31))
 run_analysis = st.sidebar.button("🚀 분석 시작", type="primary", use_container_width=True)
 
 # ------------------------------
-# 데이터 로드 함수
+# 데이터 로드 함수 (오류 수정됨)
 # ------------------------------
 @st.cache_data
 def load_data(tickers, start, end):
@@ -122,6 +122,7 @@ if run_analysis:
     with st.spinner("📡 주가 데이터를 불러오는 중입니다..."):
         try:
             price_data = load_data(all_stocks, start_date, end_date)
+            # 수정: 'M' -> 'ME' (Pandas 2.2+ 호환)
             monthly_price = price_data.resample('ME').last()
         except Exception as e:
             st.error(f"데이터 로드 실패: {e}")
@@ -161,6 +162,7 @@ if run_analysis:
     for col in log_returns.columns:
         fig.add_trace(go.Scatter(x=log_returns.index, y=log_returns[col], name=col, mode='lines'), row=2, col=1)
     fig.add_hline(y=0, line_dash="dash", line_color="red", row=2, col=1)
+    
     rolling_vol = log_returns.rolling(12).std()
     for col in rolling_vol.columns:
         fig.add_trace(go.Scatter(x=rolling_vol.index, y=rolling_vol[col], name=col, mode='lines'), row=2, col=2)
@@ -189,42 +191,61 @@ if run_analysis:
         if s in log_returns.columns:
             vol_df[f"{s} (소비)"] = log_returns[s].dropna()
     
-    vol_melt = vol_df.melt(var_name="종목", value_name="로그 수익률 (%)")
-    fig_box = px.box(vol_melt, x="종목", y="로그 수익률 (%)", color="종목",
-                     title="월별 로그 수익률 분포",
-                     template="plotly_dark", color_discrete_sequence=px.colors.qualitative.Set2)
-    fig_box.update_layout(showlegend=False, xaxis_tickangle=-45)
-    st.plotly_chart(fig_box, use_container_width=True)
+    if vol_df.empty:
+        st.warning("선택한 종목의 수익률 데이터가 없습니다.")
+    else:
+        vol_melt = vol_df.melt(var_name="종목", value_name="로그 수익률 (%)")
+        fig_box = px.box(vol_melt, x="종목", y="로그 수익률 (%)", color="종목",
+                         title="월별 로그 수익률 분포",
+                         template="plotly_dark", color_discrete_sequence=px.colors.qualitative.Set2)
+        fig_box.update_layout(showlegend=False, xaxis_tickangle=-45)
+        st.plotly_chart(fig_box, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------
-    # 4. 변동성 집중 시기 + 히트맵 (수정됨)
+    # 4. 변동성 집중 시기 + 히트맵 (완전 수정됨)
     # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("⏰ 4. 변동성 집중 시기")
     
     abs_returns = log_returns.abs().mean(axis=1).dropna()
-    top_months = abs_returns.nlargest(5)
-    st.write("**전체 종목 평균 절대 로그수익률 TOP5**")
-    st.dataframe(top_months.reset_index().rename(columns={"index": "날짜", 0: "평균 |로그수익률| (%)"}), use_container_width=True)
+    if not abs_returns.empty:
+        top_months = abs_returns.nlargest(5)
+        st.write("**전체 종목 평균 절대 로그수익률 TOP5**")
+        st.dataframe(top_months.reset_index().rename(columns={"index": "날짜", 0: "평균 |로그수익률| (%)"}), use_container_width=True)
+    else:
+        st.info("충분한 수익률 데이터가 없어 TOP5를 표시할 수 없습니다.")
     
-    # 히트맵: 연도별-월별 평균 로그수익률
+    # 히트맵: 연도-월 평균 로그수익률
     st.write("**월별 평균 로그수익률 히트맵**")
     mean_returns = log_returns.mean(axis=1).dropna()
-    # 날짜를 연도와 월로 분리하여 피벗 테이블 생성
-    heatmap_df = pd.DataFrame({
-        'year': mean_returns.index.year,
-        'month': mean_returns.index.month,
-        'return': mean_returns.values
-    })
-    heatmap_data = heatmap_df.pivot(index='year', columns='month', values='return')
-    # 월 컬럼 이름을 1~12에서 '1월'~'12월'로 변경 (선택사항)
-    heatmap_data.columns = [f"{int(col)}월" for col in heatmap_data.columns]
     
-    fig_heat = px.imshow(heatmap_data, text_auto=".2f", aspect="auto", color_continuous_scale="RdBu_r",
-                         title="월별 평균 로그수익률 (%)", template="plotly_dark", zmid=0)
-    fig_heat.update_layout(height=500)
-    st.plotly_chart(fig_heat, use_container_width=True)
+    if len(mean_returns) > 0:
+        heatmap_df = pd.DataFrame({
+            'year': mean_returns.index.year,
+            'month': mean_returns.index.month,
+            'return': mean_returns.values
+        })
+        heatmap_data = heatmap_df.pivot(index='year', columns='month', values='return')
+        heatmap_data.columns = [f"{int(col)}월" for col in heatmap_data.columns]
+        
+        if not heatmap_data.isnull().all().all():
+            fig_heat = px.imshow(
+                heatmap_data, 
+                text_auto=".2f", 
+                aspect="auto", 
+                color_continuous_scale="RdBu_r",
+                title="월별 평균 로그수익률 (%)", 
+                template="plotly_dark", 
+                zmid=0
+            )
+            fig_heat.update_layout(height=500)
+            st.plotly_chart(fig_heat, use_container_width=True)
+        else:
+            st.warning("⚠️ 히트맵 데이터가 모두 비어 있습니다 (NaN). 더 긴 기간을 선택하세요.")
+    else:
+        st.info("📊 히트맵을 표시할 수익률 데이터가 없습니다.")
+    
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------
@@ -233,9 +254,18 @@ if run_analysis:
     with st.container():
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.subheader("💡 탐구 결과 요약")
-        tech_vol = log_returns[tech_stocks].std().mean() if tech_stocks else 0
-        cons_vol = log_returns[consumer_stocks].std().mean() if consumer_stocks else 0
-        peak_month = top_months.index[0].strftime('%Y년 %m월') if not top_months.empty else "없음"
+        if tech_stocks:
+            tech_vol = log_returns[tech_stocks].std().mean()
+        else:
+            tech_vol = 0
+        if consumer_stocks:
+            cons_vol = log_returns[consumer_stocks].std().mean()
+        else:
+            cons_vol = 0
+        
+        peak_month = "없음"
+        if 'top_months' in locals() and not top_months.empty:
+            peak_month = top_months.index[0].strftime('%Y년 %m월')
         
         col_sum1, col_sum2 = st.columns(2)
         with col_sum1:
