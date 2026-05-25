@@ -229,52 +229,56 @@ else:
 # ------------------------------
 st.write("**월별 평균 로그수익률 히트맵**")
 
-# 전체 종목 평균 로그수익률
 mean_returns = log_returns.mean(axis=1).dropna()
 
 if not mean_returns.empty:
 
-    # 연도 / 월 분리
+    # 데이터프레임 생성
     heatmap_df = pd.DataFrame({
-        "연도": mean_returns.index.year.astype(int),
-        "월": mean_returns.index.month.astype(int),
-        "수익률": mean_returns.values.astype(float)
+        "연도": mean_returns.index.year,
+        "월": mean_returns.index.month,
+        "수익률": mean_returns.values
     })
 
-    # 피벗 테이블 생성
+    # 피벗
     heatmap_data = heatmap_df.pivot(
         index="연도",
         columns="월",
         values="수익률"
     )
 
-    # 숫자형 강제 변환
+    # float 변환
     heatmap_data = heatmap_data.astype(float)
 
-    # 월 이름 변경
-    month_names = {
-        1: "1월", 2: "2월", 3: "3월", 4: "4월",
-        5: "5월", 6: "6월", 7: "7월", 8: "8월",
-        9: "9월", 10: "10월", 11: "11월", 12: "12월"
-    }
+    # 월 이름
+    month_labels = [
+        "1월", "2월", "3월", "4월",
+        "5월", "6월", "7월", "8월",
+        "9월", "10월", "11월", "12월"
+    ]
 
+    # 컬럼 이름 변경
     heatmap_data.columns = [
-        month_names.get(col, str(col))
+        month_labels[col - 1]
         for col in heatmap_data.columns
     ]
 
-    # 모든 값이 NaN인지 확인
     if not heatmap_data.isnull().all().all():
 
-        # Plotly 히트맵
-        fig_heat = px.imshow(
-            heatmap_data.values,
-            x=heatmap_data.columns,
-            y=heatmap_data.index,
-            text_auto=".2f",
-            aspect="auto",
-            color_continuous_scale="RdBu_r",
-            zmid=0
+        # Heatmap 생성
+        fig_heat = go.Figure(
+            data=go.Heatmap(
+                z=heatmap_data.values,
+                x=heatmap_data.columns,
+                y=heatmap_data.index,
+                colorscale="RdBu",
+                zmid=0,
+                text=np.round(heatmap_data.values, 2),
+                texttemplate="%{text}",
+                colorbar=dict(
+                    title="수익률(%)"
+                )
+            )
         )
 
         # 레이아웃
@@ -283,8 +287,7 @@ if not mean_returns.empty:
             template="plotly_dark",
             height=500,
             xaxis_title="월",
-            yaxis_title="연도",
-            coloraxis_colorbar_title="수익률(%)"
+            yaxis_title="연도"
         )
 
         st.plotly_chart(
@@ -294,16 +297,13 @@ if not mean_returns.empty:
 
     else:
         st.warning(
-            "⚠️ 히트맵 데이터가 모두 비어 있습니다."
+            "⚠️ 히트맵 데이터가 비어 있습니다."
         )
 
 else:
     st.info(
-        "📊 히트맵을 표시할 수익률 데이터가 없습니다."
+        "📊 히트맵 데이터가 없습니다."
     )
-
-st.markdown('</div>', unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------------
 # 5. 결과 요약
