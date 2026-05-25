@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -284,6 +283,3 @@ else:
     with col_img2:
         st.image("https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=400&auto=format", 
                  caption="시장 데이터를 로그 관점으로 분석해보세요", use_container_width=True)
-
-        zmid=0
-    )
