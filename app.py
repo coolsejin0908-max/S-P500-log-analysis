@@ -8,7 +8,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime
 
 # ------------------------------
-# 페이지 기본 설정
+# 페이지 설정
 # ------------------------------
 st.set_page_config(
     page_title="로그 변동성 분석 | 기술주 vs 소비재주",
@@ -18,20 +18,17 @@ st.set_page_config(
 )
 
 # ------------------------------
-# 커스텀 CSS (다크 모드 + 세련된 스타일)
+# 커스텀 CSS (다크 모드)
 # ------------------------------
 st.markdown("""
 <style>
-    /* 전체 배경 & 기본 글꼴 */
     .stApp {
         background-color: #0e1117;
         color: #f0f2f6;
     }
-    /* 사이드바 스타일 */
     .css-1d391kg, .css-12oz5g0 {
         background-color: #1a1c23;
     }
-    /* 카드 효과 */
     .custom-card {
         background-color: #1e2128;
         border-radius: 16px;
@@ -40,12 +37,10 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         border: 1px solid #2c2f36;
     }
-    /* 제목 스타일 */
     h1, h2, h3 {
         color: #ffffff !important;
         font-weight: 600 !important;
     }
-    /* 버튼 */
     .stButton > button {
         background-color: #2c6e9e;
         color: white;
@@ -59,22 +54,16 @@ st.markdown("""
         background-color: #1e4e72;
         transform: scale(1.02);
     }
-    /* 데이터프레임 */
     .dataframe {
         background-color: #1e2128;
         color: #f0f2f6;
-        border-radius: 12px;
-    }
-    /* expander */
-    .streamlit-expanderHeader {
-        background-color: #252830;
         border-radius: 12px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ------------------------------
-# 헤더 + 이미지
+# 헤더 이미지
 # ------------------------------
 col_logo, col_title = st.columns([1, 5])
 with col_logo:
@@ -110,7 +99,7 @@ end_date = st.sidebar.date_input("📅 종료일", datetime(2024, 12, 31))
 run_analysis = st.sidebar.button("🚀 분석 시작", type="primary", use_container_width=True)
 
 # ------------------------------
-# 데이터 로드 함수 (수정본)
+# 데이터 로드 함수 (수정됨)
 # ------------------------------
 @st.cache_data
 def load_data(tickers, start, end):
@@ -133,7 +122,8 @@ if run_analysis:
     with st.spinner("📡 주가 데이터를 불러오는 중입니다..."):
         try:
             price_data = load_data(all_stocks, start_date, end_date)
-            monthly_price = price_data.resample('M').last()
+            # 수정: 'M' -> 'ME' (Pandas 2.2+ 호환)
+            monthly_price = price_data.resample('ME').last()
         except Exception as e:
             st.error(f"데이터 로드 실패: {e}")
             st.stop()
@@ -143,7 +133,7 @@ if run_analysis:
     log_returns = log_price.diff() * 100  # 월별 로그 수익률(%)
 
     # ------------------------------
-    # 1. 데이터 미리보기 (카드 형식)
+    # 1. 데이터 미리보기
     # ------------------------------
     with st.container():
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
@@ -158,7 +148,7 @@ if run_analysis:
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------
-    # 2. 시계열 차트 (Plotly 인터랙티브)
+    # 2. 시계열 차트 (Plotly)
     # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("📉 2. 시계열 비교")
@@ -204,7 +194,6 @@ if run_analysis:
         if s in log_returns.columns:
             vol_df[f"{s} (소비)"] = log_returns[s].dropna()
     
-    # 긴 형태로 변환하여 boxplot
     vol_melt = vol_df.melt(var_name="종목", value_name="로그 수익률 (%)")
     fig_box = px.box(vol_melt, x="종목", y="로그 수익률 (%)", color="종목",
                      title="월별 로그 수익률 분포",
@@ -224,7 +213,6 @@ if run_analysis:
     st.write("**전체 종목 평균 절대 로그수익률 TOP5**")
     st.dataframe(top_months.reset_index().rename(columns={"index": "날짜", 0: "평균 |로그수익률| (%)"}), use_container_width=True)
     
-    # 히트맵 (연도-월)
     st.write("**월별 평균 로그수익률 히트맵**")
     heatmap_data = log_returns.mean(axis=1).unstack().iloc[:, :12]
     fig_heat = px.imshow(heatmap_data, text_auto=".2f", aspect="auto", color_continuous_scale="RdBu_r",
@@ -250,14 +238,11 @@ if run_analysis:
         with col_sum2:
             st.markdown(f"**🔥 가장 큰 변동이 있었던 달:** {peak_month}")
             st.markdown("**🔍 상용로그의 역할**  \n주가를 log₁₀ 변환하면 지수 성장이 선형이 되어 상대적 변화율(수익률)을 직관적으로 비교할 수 있습니다.")
-        st.markdown(f"**예상과 일치?** 기술주의 변동성이 소비재주보다 {abs(tech_vol - cons_vol):.2f}%p 더 큽니다. 기술주는 시장 심리와 성장 기대감에 더 민감하기 때문입니다.")
+        st.markdown(f"**예상과 일치?** 기술주의 변동성이 소비재주보다 {abs(tech_vol - cons_vol):.2f}%p 더 큽니다.")
         st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    # 분석 전 안내 메시지
     st.info("👈 왼쪽 사이드바에서 종목과 기간을 선택한 후 **분석 시작** 버튼을 눌러주세요.")
-    
-    # 간단한 미리보기 이미지
     col_img1, col_img2, col_img3 = st.columns(3)
     with col_img2:
         st.image("https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=400&auto=format", 
