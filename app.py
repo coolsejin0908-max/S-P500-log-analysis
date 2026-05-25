@@ -202,52 +202,107 @@ if run_analysis:
         st.plotly_chart(fig_box, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ------------------------------
-    # 4. 변동성 집중 시기 + 히트맵 (완전 수정됨)
-    # ------------------------------
-    st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-    st.subheader("⏰ 4. 변동성 집중 시기")
-    
-    abs_returns = log_returns.abs().mean(axis=1).dropna()
-    if not abs_returns.empty:
-        top_months = abs_returns.nlargest(5)
-        st.write("**전체 종목 평균 절대 로그수익률 TOP5**")
-        st.dataframe(top_months.reset_index().rename(columns={"index": "날짜", 0: "평균 |로그수익률| (%)"}), use_container_width=True)
-    else:
-        st.info("충분한 수익률 데이터가 없어 TOP5를 표시할 수 없습니다.")
-    
-    # 히트맵: 연도-월 평균 로그수익률
-    st.write("**월별 평균 로그수익률 히트맵**")
-    mean_returns = log_returns.mean(axis=1).dropna()
-    
-    if len(mean_returns) > 0:
-        heatmap_df = pd.DataFrame({
-            'year': mean_returns.index.year,
-            'month': mean_returns.index.month,
-            'return': mean_returns.values
-        })
-        heatmap_data = heatmap_df.pivot(index='year', columns='month', values='return')
-        heatmap_data.columns = [f"{int(col)}월" for col in heatmap_data.columns]
-        
-        if not heatmap_data.isnull().all().all():
-            fig_heat = px.imshow(
-                heatmap_data, 
-                text_auto=".2f", 
-                aspect="auto", 
-                color_continuous_scale="RdBu_r",
-                title="월별 평균 로그수익률 (%)", 
-                template="plotly_dark", 
-                zmid=0
-            )
-            fig_heat.update_layout(height=500)
-            st.plotly_chart(fig_heat, use_container_width=True)
-        else:
-            st.warning("⚠️ 히트맵 데이터가 모두 비어 있습니다 (NaN). 더 긴 기간을 선택하세요.")
-    else:
-        st.info("📊 히트맵을 표시할 수익률 데이터가 없습니다.")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+   # ------------------------------
+# 4. 변동성 집중 시기 + 히트맵 (수정 버전)
+# ------------------------------
+st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+st.subheader("⏰ 4. 변동성 집중 시기")
 
+# 평균 절대 로그수익률
+abs_returns = log_returns.abs().mean(axis=1).dropna()
+
+if not abs_returns.empty:
+    top_months = abs_returns.nlargest(5)
+
+    st.write("**전체 종목 평균 절대 로그수익률 TOP5**")
+
+    top_df = top_months.reset_index()
+    top_df.columns = ["날짜", "평균 |로그수익률| (%)"]
+
+    st.dataframe(top_df, use_container_width=True)
+
+else:
+    st.info("충분한 수익률 데이터가 없습니다.")
+
+# ------------------------------
+# 히트맵
+# ------------------------------
+st.write("**월별 평균 로그수익률 히트맵**")
+
+# 전체 종목 평균 로그수익률
+mean_returns = log_returns.mean(axis=1).dropna()
+
+if not mean_returns.empty:
+
+    # 연도 / 월 분리
+    heatmap_df = pd.DataFrame({
+        "연도": mean_returns.index.year.astype(int),
+        "월": mean_returns.index.month.astype(int),
+        "수익률": mean_returns.values.astype(float)
+    })
+
+    # 피벗 테이블 생성
+    heatmap_data = heatmap_df.pivot(
+        index="연도",
+        columns="월",
+        values="수익률"
+    )
+
+    # 숫자형 강제 변환
+    heatmap_data = heatmap_data.astype(float)
+
+    # 월 이름 변경
+    month_names = {
+        1: "1월", 2: "2월", 3: "3월", 4: "4월",
+        5: "5월", 6: "6월", 7: "7월", 8: "8월",
+        9: "9월", 10: "10월", 11: "11월", 12: "12월"
+    }
+
+    heatmap_data.columns = [
+        month_names.get(col, str(col))
+        for col in heatmap_data.columns
+    ]
+
+    # 모든 값이 NaN인지 확인
+    if not heatmap_data.isnull().all().all():
+
+        # Plotly 히트맵
+        fig_heat = px.imshow(
+            heatmap_data.values,
+            x=heatmap_data.columns,
+            y=heatmap_data.index,
+            text_auto=".2f",
+            aspect="auto",
+            color_continuous_scale="RdBu_r",
+            zmid=0
+        )
+
+        # 레이아웃
+        fig_heat.update_layout(
+            title="월별 평균 로그수익률 (%)",
+            template="plotly_dark",
+            height=500,
+            xaxis_title="월",
+            yaxis_title="연도",
+            coloraxis_colorbar_title="수익률(%)"
+        )
+
+        st.plotly_chart(
+            fig_heat,
+            use_container_width=True
+        )
+
+    else:
+        st.warning(
+            "⚠️ 히트맵 데이터가 모두 비어 있습니다."
+        )
+
+else:
+    st.info(
+        "📊 히트맵을 표시할 수익률 데이터가 없습니다."
+    )
+
+st.markdown('</div>', unsafe_allow_html=True)
     # ------------------------------
     # 5. 결과 요약
     # ------------------------------
