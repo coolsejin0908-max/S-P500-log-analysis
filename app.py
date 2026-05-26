@@ -32,17 +32,12 @@ st.set_page_config(
 )
 
 # ------------------------------
-# 커스텀 CSS (다크 모드)
+# 커스텀 CSS
 # ------------------------------
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #0e1117;
-        color: #f0f2f6;
-    }
-    .css-1d391kg, .css-12oz5g0 {
-        background-color: #1a1c23;
-    }
+    .stApp { background-color: #0e1117; color: #f0f2f6; }
+    .css-1d391kg, .css-12oz5g0 { background-color: #1a1c23; }
     .custom-card {
         background-color: #1e2128;
         border-radius: 16px;
@@ -51,10 +46,7 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         border: 1px solid #2c2f36;
     }
-    h1, h2, h3 {
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
+    h1, h2, h3 { color: #ffffff !important; font-weight: 600 !important; }
     .stButton > button {
         background-color: #2c6e9e;
         color: white;
@@ -64,20 +56,13 @@ st.markdown("""
         border: none;
         transition: 0.2s;
     }
-    .stButton > button:hover {
-        background-color: #1e4e72;
-        transform: scale(1.02);
-    }
-    .dataframe {
-        background-color: #1e2128;
-        color: #f0f2f6;
-        border-radius: 12px;
-    }
+    .stButton > button:hover { background-color: #1e4e72; transform: scale(1.02); }
+    .dataframe { background-color: #1e2128; color: #f0f2f6; border-radius: 12px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ------------------------------
-# 헤더 이미지
+# 헤더
 # ------------------------------
 col_logo, col_title = st.columns([1, 5])
 with col_logo:
@@ -85,7 +70,6 @@ with col_logo:
 with col_title:
     st.title("📈 로그 변동성 분석")
     st.markdown("**기술주 vs 소비재주** – 상용로그 기반 월별 변동성 비교")
-
 st.markdown("---")
 
 # ------------------------------
@@ -107,18 +91,20 @@ consumer_stocks = st.sidebar.multiselect(
     default=["KO", "PG"]
 )
 
+# ---------- 날짜 선택 (미래 선택 불가) ----------
 today = date.today()
 start_date = st.sidebar.date_input(
     "📅 시작일",
-    date(2020, 1, 1),
-    max_value=today
+    value=date(2020, 1, 1),
+    max_value=today   # ✅ 오늘 이후 선택 불가
 )
 end_date = st.sidebar.date_input(
     "📅 종료일",
-    date(2024, 12, 31),
-    max_value=today
+    value=date(2024, 12, 31),
+    max_value=today   # ✅ 오늘 이후 선택 불가
 )
 
+# ✅ 분석 시작 버튼
 run_analysis = st.sidebar.button("🚀 분석 시작", type="primary", use_container_width=True)
 
 # ------------------------------
@@ -139,7 +125,7 @@ def load_data(tickers, start, end):
 # 분석 실행
 # ------------------------------
 if run_analysis:
-    # 날짜 유효성 검증
+    # ----- 날짜 검증 (안전장치) -----
     if end_date < start_date:
         st.error("❌ 종료일이 시작일보다 빠를 수 없습니다.")
         st.stop()
@@ -157,11 +143,12 @@ if run_analysis:
     if len(all_stocks) > 10:
         st.warning("⚠️ 종목이 10개를 초과하면 데이터 로드가 지연될 수 있습니다.")
 
+    # ----- 데이터 로딩 -----
     with st.spinner("📡 주가 데이터를 불러오는 중입니다..."):
         try:
             price_data = load_data(all_stocks, start_date, end_date)
             if price_data.empty:
-                st.error("선택한 종목의 데이터가 없습니다.")
+                st.error("선택한 종목의 데이터가 없습니다. 다른 종목이나 기간을 선택하세요.")
                 st.stop()
             monthly_price = price_data.resample('ME').last()
             monthly_price = monthly_price.ffill().bfill()
@@ -171,14 +158,18 @@ if run_analysis:
             st.error(f"데이터 로드 실패: {e}")
             st.stop()
 
+    # 로그 변환 및 수익률
     log_price = np.log10(monthly_price.clip(lower=1e-6))
     log_returns = log_price.diff() * 100
 
+    # 12개월 롤링 변동성 체크
     insufficient_rolling = len(log_returns) < 12
     if insufficient_rolling:
         st.warning(f"📊 12개월 롤링 변동성을 표시하려면 최소 12개월의 데이터가 필요합니다. (현재 {len(log_returns)}개월)")
 
+    # ------------------------------
     # 1. 데이터 미리보기
+    # ------------------------------
     with st.container():
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.subheader("🔢 1. 상용로그 변환 결과")
@@ -191,7 +182,9 @@ if run_analysis:
             st.dataframe(log_price.tail(8), use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # ------------------------------
     # 2. 시계열 차트
+    # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("📉 2. 시계열 비교")
     fig = make_subplots(rows=2, cols=2, subplot_titles=("원본 종가", "로그 가격 (log₁₀)", "월별 로그 수익률 (%)", "12개월 롤링 변동성"))
@@ -202,17 +195,21 @@ if run_analysis:
     for col in log_returns.columns:
         fig.add_trace(go.Scatter(x=log_returns.index, y=log_returns[col], name=col, mode='lines'), row=2, col=1)
     fig.add_hline(y=0, line_dash="dash", line_color="red", row=2, col=1)
+
     if not insufficient_rolling:
         rolling_vol = log_returns.rolling(12).std()
         for col in rolling_vol.columns:
             fig.add_trace(go.Scatter(x=rolling_vol.index, y=rolling_vol[col], name=col, mode='lines'), row=2, col=2)
     else:
         fig.add_annotation(text="데이터 부족 (12개월 미만)", xref="x2 domain", yref="y2 domain", x=0.5, y=0.5, showarrow=False, row=2, col=2)
+
     fig.update_layout(height=700, template="plotly_dark", showlegend=True)
     st.plotly_chart(fig, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ------------------------------
     # 3. 변동성 분포 박스플롯
+    # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("📊 3. 기술주 vs 소비재주 변동성 분포")
     vol_df = pd.DataFrame()
@@ -232,7 +229,9 @@ if run_analysis:
         st.plotly_chart(fig_box, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ------------------------------
     # 4. 변동성 집중 시기 + 히트맵
+    # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("⏰ 4. 변동성 집중 시기")
     abs_returns = log_returns.abs().mean(axis=1).dropna()
@@ -264,7 +263,9 @@ if run_analysis:
         st.info("📊 히트맵을 표시할 충분한 데이터가 없습니다.")
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ------------------------------
     # 5. 결과 요약
+    # ------------------------------
     with st.container():
         st.markdown('<div class="custom-card">', unsafe_allow_html=True)
         st.subheader("💡 탐구 결과 요약")
