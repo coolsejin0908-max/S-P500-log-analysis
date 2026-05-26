@@ -5,9 +5,7 @@ import yfinance as yf
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import matplotlib.pyplot as plt
-import seaborn as sns
-from datetime import datetime
+from datetime import datetime, date
 import platform
 
 # ------------------------------
@@ -89,7 +87,7 @@ with col_title:
 st.markdown("---")
 
 # ------------------------------
-# 사이드바 설정
+# 사이드바 설정 (날짜 제한 + 종목 선택)
 # ------------------------------
 st.sidebar.header("🔧 분석 설정")
 st.sidebar.markdown("### 핵심 질문")
@@ -107,8 +105,18 @@ consumer_stocks = st.sidebar.multiselect(
     default=["KO", "PG"]
 )
 
-start_date = st.sidebar.date_input("📅 시작일", datetime(2020, 1, 1))
-end_date = st.sidebar.date_input("📅 종료일", datetime(2024, 12, 31))
+# ✅ 오늘 날짜를 최대값으로 설정
+today = date.today()
+start_date = st.sidebar.date_input(
+    "📅 시작일",
+    date(2020, 1, 1),
+    max_value=today
+)
+end_date = st.sidebar.date_input(
+    "📅 종료일",
+    date(2024, 12, 31),
+    max_value=today
+)
 
 run_analysis = st.sidebar.button("🚀 분석 시작", type="primary", use_container_width=True)
 
@@ -125,7 +133,7 @@ def load_data(tickers, start, end):
     
     # 모든 값이 NaN인 컬럼 제거
     df = df.dropna(axis=1, how='all')
-    # 결측치 앞뒤로 채우기 (ffill -> bfill)
+    # 결측치 앞뒤로 채우기
     df = df.ffill().bfill()
     return df
 
@@ -133,12 +141,31 @@ def load_data(tickers, start, end):
 # 분석 실행
 # ------------------------------
 if run_analysis:
+    # ===================== 날짜 유효성 검증 =====================
+    if end_date < start_date:
+        st.error("❌ 종료일이 시작일보다 빠를 수 없습니다.")
+        st.stop()
+    if end_date > today:
+        st.error(f"❌ 종료일은 오늘({today.strftime('%Y-%m-%d')}) 이전이어야 합니다.")
+        st.stop()
+    
+    # 최소 분석 기간: 30일 (1개월) 미만은 경고 후 중단
+    min_days = 30
+    if (end_date - start_date).days < min_days:
+        st.warning(f"⚠️ 선택한 기간이 {min_days}일 미만입니다. 의미 있는 변동성을 보려면 더 긴 기간을 선택하세요.")
+        st.stop()
+    
     if not tech_stocks and not consumer_stocks:
         st.warning("⚠️ 최소 하나의 종목을 선택해주세요.")
         st.stop()
-
+    
     all_stocks = tech_stocks + consumer_stocks
-
+    
+    # (선택사항) 너무 많은 종목 방지
+    if len(all_stocks) > 10:
+        st.warning("⚠️ 종목이 10개를 초과하면 데이터 로드가 지연될 수 있습니다. 일부 종목만 선택해주세요.")
+        # 여기서 멈추지 않고 진행 (경고만)
+    
     with st.spinner("📡 주가 데이터를 불러오는 중입니다..."):
         try:
             price_data = load_data(all_stocks, start_date, end_date)
@@ -148,7 +175,7 @@ if run_analysis:
                 st.stop()
             
             monthly_price = price_data.resample('ME').last()
-            monthly_price = monthly_price.ffill().bfill()   # fillna 대신 ffill/bfill
+            monthly_price = monthly_price.ffill().bfill()
             
             # 0 이하 값 확인
             if (monthly_price <= 0).any().any():
@@ -157,11 +184,17 @@ if run_analysis:
         except Exception as e:
             st.error(f"데이터 로드 실패: {e}")
             st.stop()
-
-    # 상용로그 변환 (0 이하 방지)
+    
+    # 상용로그 변환
     log_price = np.log10(monthly_price.clip(lower=1e-6))
     log_returns = log_price.diff() * 100
-
+    
+    # ===================== 12개월 롤링 변동성을 위한 데이터 충분성 검사 =====================
+    insufficient_rolling = False
+    if len(log_returns) < 12:
+        st.warning(f"📊 12개월 롤링 변동성을 표시하려면 최소 12개월의 데이터가 필요합니다. (현재 {len(log_returns)}개월)")
+        insufficient_rolling = True
+    
     # ------------------------------
     # 1. 데이터 미리보기
     # ------------------------------
@@ -176,7 +209,7 @@ if run_analysis:
             st.markdown("**log₁₀(가격)**")
             st.dataframe(log_price.tail(8), use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
+    
     # ------------------------------
     # 2. 시계열 차트 (Plotly)
     # ------------------------------
@@ -193,9 +226,14 @@ if run_analysis:
         fig.add_trace(go.Scatter(x=log_returns.index, y=log_returns[col], name=col, mode='lines'), row=2, col=1)
     fig.add_hline(y=0, line_dash="dash", line_color="red", row=2, col=1)
     
-    rolling_vol = log_returns.rolling(12).std()
-    for col in rolling_vol.columns:
-        fig.add_trace(go.Scatter(x=rolling_vol.index, y=rolling_vol[col], name=col, mode='lines'), row=2, col=2)
+    if not insufficient_rolling:
+        rolling_vol = log_returns.rolling(12).std()
+        for col in rolling_vol.columns:
+            fig.add_trace(go.Scatter(x=rolling_vol.index, y=rolling_vol[col], name=col, mode='lines'), row=2, col=2)
+    else:
+        # 데이터 부족 시 빈 플롯에 메시지 표시
+        fig.add_annotation(text="데이터 부족 (12개월 미만)", xref="x2 domain", yref="y2 domain",
+                           x=0.5, y=0.5, showarrow=False, row=2, col=2)
     
     fig.update_layout(height=700, template="plotly_dark", showlegend=True)
     fig.update_xaxes(title_text="날짜", row=1, col=1)
@@ -206,7 +244,7 @@ if run_analysis:
     fig.update_yaxes(title_text="변동성 (%)", row=2, col=2)
     st.plotly_chart(fig, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
-
+    
     # ------------------------------
     # 3. 변동성 분포 박스플롯
     # ------------------------------
@@ -231,9 +269,9 @@ if run_analysis:
         fig_box.update_layout(showlegend=False, xaxis_tickangle=-45)
         st.plotly_chart(fig_box, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
-
+    
     # ------------------------------
-    # 4. 변동성 집중 시기 + 히트맵 (Plotly go.Heatmap)
+    # 4. 변동성 집중 시기 + 히트맵
     # ------------------------------
     st.markdown('<div class="custom-card">', unsafe_allow_html=True)
     st.subheader("⏰ 4. 변동성 집중 시기")
@@ -283,7 +321,7 @@ if run_analysis:
         st.info("📊 히트맵을 표시할 충분한 데이터가 없습니다.")
     
     st.markdown('</div>', unsafe_allow_html=True)
-
+    
     # ------------------------------
     # 5. 결과 요약
     # ------------------------------
