@@ -73,7 +73,7 @@ with col_title:
 st.markdown("---")
 
 # ------------------------------
-# 사이드바 설정
+# 사이드바 설정 (미래 날짜 선택 가능)
 # ------------------------------
 st.sidebar.header("🔧 분석 설정")
 st.sidebar.markdown("### 핵심 질문")
@@ -91,20 +91,11 @@ consumer_stocks = st.sidebar.multiselect(
     default=["KO", "PG"]
 )
 
-# ---------- 날짜 선택 (미래 선택 불가) ----------
-today = date.today()
-start_date = st.sidebar.date_input(
-    "📅 시작일",
-    value=date(2020, 1, 1),
-    max_value=today   # ✅ 오늘 이후 선택 불가
-)
-end_date = st.sidebar.date_input(
-    "📅 종료일",
-    value=date(2024, 12, 31),
-    max_value=today   # ✅ 오늘 이후 선택 불가
-)
+# ✅ 미래 날짜도 선택 가능하도록 max_value 제거
+start_date = st.sidebar.date_input("📅 시작일", value=date(2020, 1, 1))
+end_date = st.sidebar.date_input("📅 종료일", value=date(2024, 12, 31))
 
-# ✅ 분석 시작 버튼
+# 분석 시작 버튼
 run_analysis = st.sidebar.button("🚀 분석 시작", type="primary", use_container_width=True)
 
 # ------------------------------
@@ -125,16 +116,25 @@ def load_data(tickers, start, end):
 # 분석 실행
 # ------------------------------
 if run_analysis:
-    # ----- 날짜 검증 (안전장치) -----
+    today = date.today()
+    # ----- 날짜 유효성 검사 및 자동 보정 -----
+    if start_date > today:
+        st.error(f"❌ 시작일({start_date})이 오늘({today}) 이후입니다. 주가 데이터는 미래에 존재하지 않습니다. 시작일을 오늘 이전으로 바꿔주세요.")
+        st.stop()
     if end_date < start_date:
         st.error("❌ 종료일이 시작일보다 빠를 수 없습니다.")
         st.stop()
+    
+    # 종료일이 미래면 자동으로 오늘로 변경
+    original_end = end_date
     if end_date > today:
-        st.error(f"❌ 종료일은 오늘({today.strftime('%Y-%m-%d')}) 이전이어야 합니다.")
-        st.stop()
+        end_date = today
+        st.warning(f"⚠️ 종료일이 미래({original_end})로 설정되어 오늘({today})로 자동 변경합니다. 미래 데이터는 없습니다.")
+    
     if (end_date - start_date).days < 30:
         st.warning("⚠️ 선택한 기간이 30일 미만입니다. 더 긴 기간을 선택하세요.")
         st.stop()
+    
     if not tech_stocks and not consumer_stocks:
         st.warning("⚠️ 최소 하나의 종목을 선택해주세요.")
         st.stop()
@@ -148,7 +148,7 @@ if run_analysis:
         try:
             price_data = load_data(all_stocks, start_date, end_date)
             if price_data.empty:
-                st.error("선택한 종목의 데이터가 없습니다. 다른 종목이나 기간을 선택하세요.")
+                st.warning(f"📭 선택한 기간({start_date} ~ {end_date})에 데이터가 없습니다. 더 이른 시작일을 선택하세요.")
                 st.stop()
             monthly_price = price_data.resample('ME').last()
             monthly_price = monthly_price.ffill().bfill()
